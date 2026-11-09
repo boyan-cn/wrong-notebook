@@ -75,6 +75,7 @@ class ConsultIn(BaseModel):
 
 class AskIn(BaseModel):
     subject: str = Field(default="", max_length=20)
+    image_path: str = Field(default="", max_length=200)
     messages: list[ConsultMessage] = Field(min_length=1, max_length=20)
 
 
@@ -99,6 +100,15 @@ def _resolve_owned_image(user_id: int, image_path: str) -> Path:
     if not path.is_file():
         raise HTTPException(status_code=404, detail="图片不存在，请重新上传")
     return path
+
+
+def _image_data_url(user_id: int, image_path: str) -> str:
+    path = _resolve_owned_image(user_id, image_path)
+    mime = MIME_BY_EXT.get(path.suffix.lower())
+    if mime is None:
+        raise HTTPException(status_code=400, detail="图片格式不支持")
+    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+    return f"data:{mime};base64,{encoded}"
 
 
 def _delete_image(user_id: int, image_path: str | None) -> None:
@@ -150,12 +160,7 @@ async def upload_image(
 @router.post("/questions/analyze")
 async def analyze(payload: AnalyzeIn, user: dict = Depends(get_current_user)):
     provider = _provider_or_error()
-    path = _resolve_owned_image(user["id"], payload.image_path)
-    mime = MIME_BY_EXT.get(path.suffix.lower())
-    if mime is None:
-        raise HTTPException(status_code=400, detail="图片格式不支持")
-    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
-    data_url = f"data:{mime};base64,{encoded}"
+    data_url = _image_data_url(user["id"], payload.image_path)
     try:
         result = await ai.analyze_question(provider, payload.subject.strip(), user.get("grade", ""), data_url)
     except ai.AIError as exc:
@@ -229,8 +234,15 @@ async def ask(payload: AskIn, user: dict = Depends(get_current_user)):
     if not messages or messages[-1]["role"] != "user":
         raise HTTPException(status_code=400, detail="请输入你的问题")
     provider = _provider_or_error()
+    image_data_url = _image_data_url(user["id"], payload.image_path) if payload.image_path else None
     try:
-        reply = await ai.ask_expert(provider, user.get("grade", ""), payload.subject, messages)
+        reply = await ai.ask_expert(
+            provider,
+            user.get("grade", ""),
+            payload.subject,
+            messages,
+            image_data_url=image_data_url,
+        )
     except ai.AIError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
     return {"reply": reply}

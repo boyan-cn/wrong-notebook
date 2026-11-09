@@ -85,7 +85,8 @@ ASK_PROMPT = """你是一位耐心、专业的中小学老师，正在回答学�
 2. 只使用该学生年级已经学过的知识和方法，不使用超纲内容。如果问题本身超出该年级范围，用通俗的方式说明，并告诉孩子以后会学到。
 3. 如果问题描述不清楚，先指出缺少哪些信息，再给出你能做的分析，并请对方补充。
 4. 语气温和、鼓励，不要贬低孩子；可以举生活中的例子帮助理解。
-5. 用纯文本回答，可以用短段落或编号列出步骤，不要输出 JSON、Markdown 代码块或多余的格式说明。"""
+5. 如果用户提供了题目照片，请先看清照片中的题目和孩子的作答，再针对性讲解；照片不清晰时请指出需要重拍的部分，不要凭空编造题目。
+6. 用纯文本回答，可以用短段落或编号列出步骤，不要输出 JSON、Markdown 代码块或多余的格式说明。"""
 
 
 def grade_note(grade: str) -> str:
@@ -455,7 +456,13 @@ async def consult_expert(
     return {"reply": reply, "revised": revised}
 
 
-async def ask_expert(provider: sqlite3.Row, grade: str, subject: str, history: list[dict]) -> str:
+async def ask_expert(
+    provider: sqlite3.Row,
+    grade: str,
+    subject: str,
+    history: list[dict],
+    image_data_url: str | None = None,
+) -> str:
     subject = (subject or "").strip()
     prompt = ASK_PROMPT.format(
         grade_note=grade_note(grade),
@@ -471,6 +478,11 @@ async def ask_expert(provider: sqlite3.Row, grade: str, subject: str, history: l
             messages.append({"role": role, "content": content})
     if messages[-1]["role"] != "user":
         raise AIError("请先输入你的问题")
+    if image_data_url:
+        messages[-1]["content"] = [
+            {"type": "text", "text": messages[-1]["content"]},
+            {"type": "image_url", "image_url": {"url": image_data_url}},
+        ]
 
     content = await _chat(provider, messages, temperature=0.4, max_tokens=2500)
     reply = _clip(content, 8000)

@@ -1224,6 +1224,56 @@ a {
   background: transparent;
 }
 
+.qa-attach {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+}
+
+.qa-attach img {
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: #1f2330;
+}
+
+.qa-attach-info {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.qa-attach-info strong {
+  font-size: 12.5px;
+  color: var(--ink);
+}
+
+.qa-attach-info small {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.qa-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.qa-foot .btn svg {
+  vertical-align: -2px;
+}
+
 /* ---------------------------------------------------------------- 我有疑问 */
 
 .consult-card {
@@ -1329,63 +1379,6 @@ a {
   flex: 1 1 auto;
   min-height: 62px;
   resize: none;
-}
-
-.consult-input-box {
-  position: relative;
-  display: flex;
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.consult-input-box .textarea {
-  width: 100%;
-  padding-right: 52px;
-}
-
-.voice-btn {
-  position: absolute;
-  right: 8px;
-  bottom: 8px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  padding: 0;
-  border: 1px solid var(--line-strong);
-  border-radius: 50%;
-  background: #fffdf7;
-  color: var(--muted);
-  cursor: pointer;
-  transition: color 0.18s ease, border-color 0.18s ease, background 0.18s ease;
-}
-
-.voice-btn[hidden] {
-  display: none;
-}
-
-.voice-btn:hover {
-  color: var(--primary);
-  border-color: var(--primary);
-}
-
-.voice-btn:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 2px;
-}
-
-.voice-btn.recording {
-  color: #c0392b;
-  border-color: #e5a5a0;
-  background: #fff3f1;
-  animation: voice-pulse 1.4s infinite;
-}
-
-@keyframes voice-pulse {
-  0% { box-shadow: 0 0 0 0 rgba(216, 74, 58, 0.32); }
-  70% { box-shadow: 0 0 0 8px rgba(216, 74, 58, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(216, 74, 58, 0); }
 }
 
 .consult-input-row .btn {

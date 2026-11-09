@@ -31,8 +31,8 @@
   const ICONS = {
     search: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.6-3.6"></path></svg>',
     camera: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z"></path><circle cx="12" cy="13" r="3.5"></circle></svg>',
+    cameraSm: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z"></path><circle cx="12" cy="13" r="3.5"></circle></svg>',
     book: '<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21.5v-16Z"></path><path d="M4 18.5A2.5 2.5 0 0 1 6.5 16H20"></path><path d="M8 7h8M8 11h5"></path></svg>',
-    mic: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0"></path><path d="M12 18v3"></path></svg>',
   };
 
   const state = {
@@ -47,7 +47,7 @@
     searchTimer: null,
     detail: null,
     add: null,
-    qa: { messages: [], busy: false, error: "" },
+    qa: { messages: [], imagePath: "", imagePreview: "", uploading: false, busy: false, adding: false, error: "" },
     providers: null,
     modalKind: null,
   };
@@ -252,7 +252,6 @@
   }
 
   function closeModal() {
-    stopVoice();
     modalRoot.innerHTML = "";
     state.modalKind = null;
     state.detail = null;
@@ -452,7 +451,7 @@
     state.user = null;
     state.subjects = DEFAULT_SUBJECTS.slice();
     state.list = null;
-    state.qa = { messages: [], busy: false, error: "" };
+    state.qa = { messages: [], imagePath: "", imagePreview: "", uploading: false, busy: false, adding: false, error: "" };
     state.providers = null;
     state.filters = { subject: "", status: "", q: "", page: 1 };
     localStorage.removeItem(TOKEN_KEY);
@@ -511,13 +510,23 @@
           <button type="button" class="btn btn-ghost btn-sm" data-action="clear-qa">清空对话</button>
         </div>
         <div class="consult-log qa-log" id="qa-log"></div>
-        <div class="consult-input-row">
-          <div class="consult-input-box">
-            <textarea class="textarea" id="qa-input" rows="2" maxlength="1000" placeholder="例如：为什么除以一个分数等于乘它的倒数？"></textarea>
-            <button type="button" class="voice-btn" id="qa-voice" aria-label="语音输入" aria-pressed="false" title="语音输入" hidden>${ICONS.mic}</button>
+        <div class="qa-attach" id="qa-attach" hidden>
+          <img id="qa-attach-img" alt="已选择的题目照片">
+          <div class="qa-attach-info">
+            <strong>已附带题目照片</strong>
+            <small>提问时会连同照片一起发给老师</small>
           </div>
+          <button type="button" class="btn btn-ghost btn-sm" id="btn-qa-remove-photo">移除</button>
+        </div>
+        <div class="consult-input-row">
+          <textarea class="textarea" id="qa-input" rows="2" maxlength="1000" placeholder="例如：为什么除以一个分数等于乘它的倒数？"></textarea>
           <button type="button" class="btn btn-primary" id="btn-qa">发送</button>
         </div>
+        <div class="qa-foot">
+          <button type="button" class="btn btn-ghost btn-sm" id="btn-qa-photo">${ICONS.cameraSm} 拍照 / 上传题目</button>
+          <button type="button" class="btn btn-soft btn-sm" id="btn-qa-add" hidden>＋ 把这题加入错题本</button>
+        </div>
+        <input type="file" id="qa-file" accept="image/jpeg,image/png,image/webp" hidden>
         <div class="consult-error" id="qa-error" hidden></div>
       </section>
       <section class="toolbar">
@@ -546,7 +555,20 @@
         }
       });
     }
-    attachVoice(document.getElementById("qa-voice"), qaInput);
+    const qaPhotoBtn = document.getElementById("btn-qa-photo");
+    const qaFile = document.getElementById("qa-file");
+    if (qaPhotoBtn && qaFile) qaPhotoBtn.addEventListener("click", () => qaFile.click());
+    if (qaFile) {
+      qaFile.addEventListener("change", () => {
+        const file = qaFile.files && qaFile.files[0];
+        qaFile.value = "";
+        if (file) pickQaFile(file);
+      });
+    }
+    const qaRemovePhoto = document.getElementById("btn-qa-remove-photo");
+    if (qaRemovePhoto) qaRemovePhoto.addEventListener("click", removeQaPhoto);
+    const qaAddBtn = document.getElementById("btn-qa-add");
+    if (qaAddBtn) qaAddBtn.addEventListener("click", qaAddToNotebook);
 
     const search = document.getElementById("search-input");
     if (search) {
@@ -827,10 +849,7 @@
             </div>
             <div class="consult-log" id="consult-log"></div>
             <div class="consult-input-row">
-              <div class="consult-input-box">
-                <textarea class="textarea" id="consult-input" rows="2" maxlength="1000" placeholder="例如：第 3 步为什么要除以原来的面积？我觉得答案应该是 6 倍"></textarea>
-                <button type="button" class="voice-btn" id="consult-voice" aria-label="语音输入" aria-pressed="false" title="语音输入" hidden>${ICONS.mic}</button>
-              </div>
+              <textarea class="textarea" id="consult-input" rows="2" maxlength="1000" placeholder="例如：第 3 步为什么要除以原来的面积？我觉得答案应该是 6 倍"></textarea>
               <button type="button" class="btn btn-soft" id="btn-consult">发送</button>
             </div>
             <div class="consult-error" id="consult-error" hidden></div>
@@ -903,7 +922,6 @@
           }
         });
       }
-      attachVoice(document.getElementById("consult-voice"), consultInput);
       const consultCard = document.querySelector(".consult-card");
       if (consultCard) {
         consultCard.addEventListener("click", (event) => {
@@ -1184,124 +1202,41 @@
     }
   }
 
-  // -------------------------------------------------------------- 语音输入
-
-  const SpeechAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
-  let activeVoice = null;
-
-  function stopVoice() {
-    const current = activeVoice;
-    if (!current) return;
-    activeVoice = null;
-    try {
-      current.recognition.abort();
-    } catch (error) {
-      /* 忽略停止时的异常 */
-    }
-    current.button.classList.remove("recording");
-    current.button.setAttribute("aria-pressed", "false");
-    current.button.title = "语音输入";
-  }
-
-  function attachVoice(button, input) {
-    if (!button || !input) return;
-    if (!SpeechAPI) {
-      button.hidden = true;
-      return;
-    }
-    button.hidden = false;
-    if (activeVoice && activeVoice.button !== button) stopVoice();
-    button.addEventListener("click", () => toggleVoice(button, input));
-  }
-
-  function toggleVoice(button, input) {
-    if (activeVoice && activeVoice.button === button) {
-      stopVoice();
-      return;
-    }
-    stopVoice();
-    if (!window.isSecureContext) {
-      showToast("语音输入需要 HTTPS 访问，请先为站点配置 HTTPS", "error");
-      return;
-    }
-
-    const recognition = new SpeechAPI();
-    recognition.lang = "zh-CN";
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
-    const baseText = input.value.trim();
-    let finalText = "";
-
-    activeVoice = { recognition, button, input };
-    button.classList.add("recording");
-    button.setAttribute("aria-pressed", "true");
-    button.title = "正在听，点击停止";
-
-    recognition.onresult = (event) => {
-      let interim = "";
-      for (let i = event.resultIndex; i < event.results.length; i += 1) {
-        const result = event.results[i];
-        const piece = result && result[0] ? result[0].transcript : "";
-        if (result && result.isFinal) finalText += piece;
-        else interim += piece;
-      }
-      const spoken = (finalText + interim).trim();
-      if (!spoken) return;
-      input.value = baseText ? `${baseText} ${spoken}` : spoken;
-    };
-    recognition.onerror = (event) => {
-      const messages = {
-        "not-allowed": "麦克风权限被拒绝，请允许浏览器使用麦克风后重试",
-        "service-not-allowed": "语音识别被浏览器限制，请使用 HTTPS 访问",
-        "audio-capture": "没有检测到麦克风，请检查设备",
-        network: "语音识别服务连接失败，请检查网络（国内 Chrome 可能无法使用）",
-        "no-speech": "没有听到声音，请靠近麦克风再说一次",
-      };
-      if (event.error !== "aborted") {
-        showToast(messages[event.error] || "语音输入失败，请重试", "error");
-      }
-    };
-    recognition.onend = () => {
-      if (activeVoice && activeVoice.recognition === recognition) {
-        activeVoice = null;
-        button.classList.remove("recording");
-        button.setAttribute("aria-pressed", "false");
-        button.title = "语音输入";
-        input.focus();
-      }
-    };
-
-    try {
-      recognition.start();
-    } catch (error) {
-      stopVoice();
-      showToast("语音输入启动失败，请重试", "error");
-    }
-  }
-
   // -------------------------------------------------------------- 主页提问
 
   function renderQaPanel() {
     const log = document.getElementById("qa-log");
     if (!log) return;
     const qa = state.qa;
-    const items = qa.messages.map(consultMessageHtml).join("");
+    const items = qa.messages.map((item, index) => consultMessageHtml(item, index, "老师")).join("");
     const typing = qa.busy
       ? `<div class="consult-msg expert">
            <span class="consult-role">老师</span>
            <div class="consult-bubble"><div class="consult-typing"><span></span><span></span><span></span></div></div>
          </div>`
       : "";
-    log.innerHTML = items + typing || `<p class="consult-empty">有不懂的题目、概念或方法，直接问 AI 老师。</p>`;
+    log.innerHTML = items + typing || `<p class="consult-empty">有不懂的题目、概念或方法，直接问 AI 老师；也可以拍下题目让老师看图讲解。</p>`;
 
     const btn = document.getElementById("btn-qa");
     if (btn) {
-      btn.disabled = qa.busy;
-      btn.textContent = qa.busy ? "老师思考中…" : "发送";
+      btn.disabled = qa.busy || qa.uploading;
+      btn.textContent = qa.busy ? "老师思考中…" : qa.uploading ? "照片上传中…" : "发送";
     }
     const input = document.getElementById("qa-input");
     if (input) input.disabled = qa.busy;
+    const photoBtn = document.getElementById("btn-qa-photo");
+    if (photoBtn) {
+      photoBtn.disabled = qa.uploading || qa.busy;
+      photoBtn.innerHTML = qa.uploading
+        ? "照片处理中…"
+        : `${ICONS.cameraSm} ${qa.imagePreview ? "更换题目照片" : "拍照 / 上传题目"}`;
+    }
+    const attach = document.getElementById("qa-attach");
+    if (attach) attach.hidden = !qa.imagePreview;
+    const attachImg = document.getElementById("qa-attach-img");
+    if (attachImg && qa.imagePreview) attachImg.src = qa.imagePreview;
+    const addBtn = document.getElementById("btn-qa-add");
+    if (addBtn) addBtn.hidden = !(qa.messages.length || qa.imagePath);
     const error = document.getElementById("qa-error");
     if (error) {
       error.textContent = qa.error || "";
@@ -1310,18 +1245,58 @@
     log.scrollTop = log.scrollHeight;
   }
 
+  async function pickQaFile(file) {
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      showToast("仅支持 JPG、PNG、WEBP 格式的图片", "error");
+      return;
+    }
+    const qa = state.qa;
+    if (qa.uploading || qa.busy) return;
+    qa.uploading = true;
+    qa.error = "";
+    renderQaPanel();
+    try {
+      const blob = await compressImage(file);
+      qa.imagePreview = await fileToDataUrl(blob);
+      const formData = new FormData();
+      formData.append("file", blob, "question.jpg");
+      const uploaded = await api("/api/uploads", { method: "POST", body: formData });
+      qa.imagePath = uploaded.path;
+    } catch (error) {
+      qa.imagePath = "";
+      qa.imagePreview = "";
+      qa.error = error.message;
+    } finally {
+      qa.uploading = false;
+      renderQaPanel();
+    }
+  }
+
+  function removeQaPhoto() {
+    const qa = state.qa;
+    if (qa.uploading) return;
+    qa.imagePath = "";
+    qa.imagePreview = "";
+    renderQaPanel();
+  }
+
   async function sendQa() {
     const qa = state.qa;
     if (qa.busy) return;
-    stopVoice();
-    const input = document.getElementById("qa-input");
-    if (!input) return;
-    const text = input.value.trim();
-    if (!text) {
-      qa.error = "请先输入你的问题";
+    if (qa.uploading) {
+      qa.error = "照片还在上传，请稍等一下";
       renderQaPanel();
       return;
     }
+    const input = document.getElementById("qa-input");
+    if (!input) return;
+    let text = input.value.trim();
+    if (!text && !qa.imagePath) {
+      qa.error = "请输入你的问题，或先拍下题目照片";
+      renderQaPanel();
+      return;
+    }
+    if (!text) text = "请帮我讲解这道题，并指出解题的关键步骤。";
     qa.messages.push({ role: "user", content: text });
     qa.busy = true;
     qa.error = "";
@@ -1333,7 +1308,7 @@
         .map((item) => ({ role: item.role, content: item.content }));
       const result = await api("/api/ai/ask", {
         method: "POST",
-        body: { subject: "", messages: history },
+        body: { subject: "", messages: history, image_path: qa.imagePath || "" },
       });
       qa.messages.push({ role: "assistant", content: result.reply });
     } catch (error) {
@@ -1344,24 +1319,77 @@
     }
   }
 
+  async function qaAddToNotebook() {
+    const qa = state.qa;
+    if (qa.busy || qa.uploading || qa.adding) return;
+    const lastUser = [...qa.messages].reverse().find((item) => item.role === "user");
+    const lastReply = [...qa.messages].reverse().find((item) => item.role === "assistant");
+    const fallbackAi = {
+      question_text: lastUser ? lastUser.content : "",
+      solution: lastReply ? lastReply.content : "",
+    };
+    const hasImage = Boolean(qa.imagePath);
+    qa.adding = true;
+    state.add = {
+      step: 2,
+      file: null,
+      preview: hasImage ? qa.imagePreview : "",
+      crop: null,
+      cropPreview: hasImage ? qa.imagePreview : "",
+      image_path: qa.imagePath || "",
+      ai: hasImage ? null : fallbackAi,
+      aiError: "",
+      error: "",
+      busy: hasImage,
+      analyzing: hasImage,
+      subject: "",
+      consult: { messages: [], busy: false, error: "" },
+    };
+    renderAddModal();
+    if (!hasImage) {
+      qa.adding = false;
+      return;
+    }
+    try {
+      const result = await api("/api/questions/analyze", {
+        method: "POST",
+        body: { image_path: qa.imagePath },
+      });
+      if (state.modalKind !== "add") return;
+      state.add.ai = result;
+      state.add.subject = result.subject || "";
+    } catch (error) {
+      if (state.modalKind !== "add") return;
+      state.add.ai = fallbackAi;
+      state.add.aiError = error.message;
+    } finally {
+      qa.adding = false;
+    }
+    if (state.modalKind !== "add") return;
+    state.add.busy = false;
+    state.add.analyzing = false;
+    state.add.step = 2;
+    renderAddModal();
+  }
+
   function clearQa() {
     if (state.qa.busy) {
       showToast("等老师回答完再清空吧", "error");
       return;
     }
-    if (!state.qa.messages.length) return;
-    state.qa = { messages: [], busy: false, error: "" };
+    if (!state.qa.messages.length && !state.qa.imagePath) return;
+    state.qa = { messages: [], imagePath: "", imagePreview: "", uploading: false, busy: false, adding: false, error: "" };
     renderQaPanel();
   }
 
   // -------------------------------------------------------------- 我有疑问
 
-  function consultMessageHtml(message, index) {
+  function consultMessageHtml(message, index, expertLabel = "专家") {
     const mine = message.role === "user";
     const revisedCount = message.revised ? Object.keys(message.revised).length : 0;
     return `
       <div class="consult-msg ${mine ? "mine" : "expert"}">
-        <span class="consult-role">${mine ? "我" : "专家"}</span>
+        <span class="consult-role">${mine ? "我" : esc(expertLabel)}</span>
         <div class="consult-bubble">
           <div class="consult-text">${esc(message.content || "")}</div>
           ${revisedCount ? `<button type="button" class="btn btn-ghost btn-sm consult-apply" data-consult-apply="${index}">应用专家的修改</button>` : ""}
@@ -1404,7 +1432,6 @@
     const add = state.add;
     if (!add || !add.consult || add.consult.busy) return;
     if (state.modalKind !== "add" || add.step !== 2) return;
-    stopVoice();
     const input = document.getElementById("consult-input");
     const form = document.getElementById("save-question-form");
     if (!input || !form) return;
